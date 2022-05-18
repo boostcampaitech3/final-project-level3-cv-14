@@ -222,3 +222,6 @@ events.out.tfevents*
 
 # nohup
 nohup.out
+
+# wandb
+wandb

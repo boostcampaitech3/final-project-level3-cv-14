@@ -136,6 +136,10 @@ class Trainer:
         logger.info(
             "Model Summary: {}".format(get_model_info(model, self.exp.test_size))
         )
+        infos = get_model_info(model, self.exp.test_size).split(', ')
+        params=infos[0].split(': ')[1]
+        gflops=infos[1].split(': ')[1]
+
         model.to(self.device)
 
         # solver related init
@@ -185,6 +189,8 @@ class Trainer:
                     if k.startswith("wandb-"):
                         wandb_params.update({k.lstrip("wandb-"): v})
                 self.wandb_logger = WandbLogger(config=vars(self.exp), **wandb_params)
+                self.wandb_logger.log_metrics({'Params [M]':float(params[:-1])})
+                self.wandb_logger.log_metrics({'GFLOPs': float(gflops)})
             else:
                 raise ValueError("logger must be either 'tensorboard' or 'wandb'")
 
