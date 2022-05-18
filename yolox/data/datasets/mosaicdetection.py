@@ -151,7 +151,7 @@ class MosaicDetection(Dataset):
             # img_info and img_id are not used for training.
             # They are also hard to be specified on a mosaic image.
             # -----------------------------------------------------------------
-            return mix_img, padded_labels, img_info, img_id
+            return mix_img, padded_labels, img_info, idx
 
         else:
             self._dataset._input_dim = self.input_dim
