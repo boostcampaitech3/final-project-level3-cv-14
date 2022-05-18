@@ -37,7 +37,7 @@ rm -rf VOCtest_06-Nov-2007.tar
 ### Train
 
 ```python
-python tools/train.py -f exps/default/yolox_voc_nano.py -b 16
+python tools/train.py -f exps/default/yolox_voc_nano.py -b 16 --logger wandb wandb-project <project name>
 ```
 
 ## Cite YOLOX
