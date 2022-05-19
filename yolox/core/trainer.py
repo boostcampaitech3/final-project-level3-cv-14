@@ -29,7 +29,7 @@ from yolox.utils import (
     occupy_mem,
     save_checkpoint,
     setup_logger,
-    synchronize
+    synchronize,
 )
 
 
@@ -69,6 +69,10 @@ class Trainer:
             filename="train_log.txt",
             mode="a",
         )
+
+        self.preds_list = []
+        self.outputs_list = []
+        self.files = []
 
     def train(self):
         self.before_train()
@@ -136,9 +140,9 @@ class Trainer:
         logger.info(
             "Model Summary: {}".format(get_model_info(model, self.exp.test_size))
         )
-        infos = get_model_info(model, self.exp.test_size).split(', ')
-        params=infos[0].split(': ')[1]
-        gflops=infos[1].split(': ')[1]
+        infos = get_model_info(model, self.exp.test_size).split(", ")
+        params = infos[0].split(": ")[1]
+        gflops = infos[1].split(": ")[1]
 
         model.to(self.device)
 
@@ -181,16 +185,20 @@ class Trainer:
         )
         # Tensorboard and Wandb loggers
         if self.rank == 0:
+            self.get_image_list()
             if self.args.logger == "tensorboard":
-                self.tblogger = SummaryWriter(os.path.join(self.file_name, "tensorboard"))
+                self.tblogger = SummaryWriter(
+                    os.path.join(self.file_name, "tensorboard")
+                )
             elif self.args.logger == "wandb":
                 wandb_params = dict()
                 for k, v in zip(self.args.opts[0::2], self.args.opts[1::2]):
                     if k.startswith("wandb-"):
                         wandb_params.update({k.lstrip("wandb-"): v})
                 self.wandb_logger = WandbLogger(config=vars(self.exp), **wandb_params)
-                self.wandb_logger.log_metrics({'Params [M]':float(params[:-1])})
-                self.wandb_logger.log_metrics({'GFLOPs': float(gflops)})
+                self.wandb_logger.log_metrics({"Params [M]": float(params[:-1])})
+                self.wandb_logger.log_metrics({"GFLOPs": float(gflops)})
+                self.wandb_logger.add_table(self.files)
             else:
                 raise ValueError("logger must be either 'tensorboard' or 'wandb'")
 
@@ -199,7 +207,9 @@ class Trainer:
 
     def after_train(self):
         logger.info(
-            "Training of experiment is done and the best AP is {:.2f}".format(self.best_ap * 100)
+            "Training of experiment is done and the best AP is {:.2f}".format(
+                self.best_ap * 100
+            )
         )
         if self.rank == 0:
             if self.args.logger == "wandb":
@@ -269,7 +279,9 @@ class Trainer:
 
             if self.rank == 0:
                 if self.args.logger == "wandb":
-                    self.wandb_logger.log_metrics({k: v.latest for k, v in loss_meter.items()})
+                    self.wandb_logger.log_metrics(
+                        {k: v.latest for k, v in loss_meter.items()}
+                    )
                     self.wandb_logger.log_metrics({"lr": self.meter["lr"].latest})
 
             self.meter.clear_meters()
@@ -328,9 +340,19 @@ class Trainer:
                 evalmodel = evalmodel.module
 
         with adjust_status(evalmodel, training=False):
-            ap50_95, ap50, summary = self.exp.eval(
-                evalmodel, self.evaluator, self.is_distributed
-            )
+            (
+                (ap50_95, ap50, summary),
+                outputs_list,
+                predictions_list,
+            ) = self.exp.custom_eval(evalmodel, self.evaluator, self.is_distributed)
+            # (ap50_95, ap50, summary) = self.exp.eval(
+            #     evalmodel, self.evaluator, self.is_distributed
+            # )
+
+        self.outputs_list = outputs_list
+        self.preds_list = predictions_list
+        print("outputs_list", outputs_list)
+        print("predictions_list", predictions_list)
 
         update_best_ckpt = ap50_95 > self.best_ap
         self.best_ap = max(self.best_ap, ap50_95)
@@ -340,11 +362,13 @@ class Trainer:
                 self.tblogger.add_scalar("val/COCOAP50", ap50, self.epoch + 1)
                 self.tblogger.add_scalar("val/COCOAP50_95", ap50_95, self.epoch + 1)
             if self.args.logger == "wandb":
-                self.wandb_logger.log_metrics({
-                    "val/COCOAP50": ap50,
-                    "val/COCOAP50_95": ap50_95,
-                    "epoch": self.epoch + 1,
-                })
+                self.wandb_logger.log_metrics(
+                    {
+                        "val/COCOAP50": ap50,
+                        "val/COCOAP50_95": ap50_95,
+                        "epoch": self.epoch + 1,
+                    }
+                )
             logger.info("\n" + summary)
         synchronize()
 
@@ -370,4 +394,22 @@ class Trainer:
             )
 
             if self.args.logger == "wandb":
-                self.wandb_logger.save_checkpoint(self.file_name, ckpt_name, update_best_ckpt)
+                self.wandb_logger.save_checkpoint(
+                    self.file_name, ckpt_name, update_best_ckpt
+                )
+
+    def get_image_list(
+        self,
+        path="/opt/ml/final-project-level3-cv-14/datasets/test/VOCdevkit/VOC2007/JPEGImages",
+    ):
+        IMAGE_EXT = [".jpg", ".jpeg", ".webp", ".bmp", ".png"]
+        image_names = []
+        for maindir, subdir, file_name_list in os.walk(path):
+            for filename in file_name_list:
+                apath = os.path.join(maindir, filename)
+                ext = os.path.splitext(apath)[1]
+                if ext in IMAGE_EXT:
+                    image_names.append(apath)
+
+        image_names.sort()
+        self.files = image_names
