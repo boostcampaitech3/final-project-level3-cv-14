@@ -8,6 +8,7 @@ import sys
 from loguru import logger
 
 import torch
+from tqdm import tqdm
 
 
 def get_caller_name(depth=0):
@@ -216,28 +217,34 @@ class WandbLogger(object):
     def finish(self):
         self.run.finish()
 
-    def add_table(self, files):
+    def add_table(self, artifact_name, raw_images, output_dir, epoch):
         # create an artifact for all the raw data
-        artifact = self.wandb.Artifact("Test_Dataset", type="raw_data")
+        artifact = self.wandb.Artifact(artifact_name, type="raw_data")
 
         # Setup a WandB Table object to hold our dataset
-        columns = ["id", "raw"]
+        columns = ["id", "raw", "pred"]
         # add a column for the pixel fraction of each class label
         table = self.wandb.Table(columns=columns)
 
         # SRC_DIR contains 10 folders, one for each of 10 class labels
         # each folder contains images of the corresponding class
-        for image_path in files:
-            img = image_path.split("/")[-1]
-            artifact.add_file(image_path, name=img)
+
+        print("making a table...")
+        for idx, image_path in tqdm(enumerate(raw_images), total=len(raw_images)):
+            img_name = image_path.split("/")[-1]
+            pred_img_path = os.path.join(output_dir, img_name)
+
+            artifact.add_file(pred_img_path, name=img_name)
+
             # Finally, we add a row of our newly constructed data.
-            train_id = img.split(".")[0]
+            train_id = img_name.split(".")[0]
             raw_img = self.wandb.Image(image_path)
-            row = [train_id, raw_img]
+            pred_img = self.wandb.Image(pred_img_path)
+            row = [train_id, raw_img, pred_img]
             table.add_data(*row)
 
         # .add the table to the artifact
-        artifact.add(table, "raw_examples")
+        artifact.add(table, f"epoch_{epoch+1}_pred_results")
 
         # save artifact to W&B
-        self.wandb.log_artifact(artifact)
+        self.run.log_artifact(artifact)

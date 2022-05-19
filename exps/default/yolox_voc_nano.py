@@ -29,23 +29,30 @@ class Exp(MyExp):
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
     def get_model(self, sublinear=False):
-
         def init_yolo(M):
             for m in M.modules():
                 if isinstance(m, nn.BatchNorm2d):
                     m.eps = 1e-3
                     m.momentum = 0.03
+
         if "model" not in self.__dict__:
             from yolox.models import YOLOX, YOLOPAFPN, YOLOXHead
+
             in_channels = [256, 512, 1024]
             # NANO model use depthwise = True, which is main difference.
             backbone = YOLOPAFPN(
-                self.depth, self.width, in_channels=in_channels,
-                act=self.act, depthwise=True,
+                self.depth,
+                self.width,
+                in_channels=in_channels,
+                act=self.act,
+                depthwise=True,
             )
             head = YOLOXHead(
-                self.num_classes, self.width, in_channels=in_channels,
-                act=self.act, depthwise=True
+                self.num_classes,
+                self.width,
+                in_channels=in_channels,
+                act=self.act,
+                depthwise=True,
             )
             self.model = YOLOX(backbone, head)
 
@@ -53,7 +60,9 @@ class Exp(MyExp):
         self.model.head.initialize_biases(1e-2)
         return self.model
 
-    def get_data_loader(self, batch_size, is_distributed, no_aug=False, cache_img=False):
+    def get_data_loader(
+        self, batch_size, is_distributed, no_aug=False, cache_img=False
+    ):
         from yolox.data import (
             VOCDetection,
             TrainTransform,
@@ -67,17 +76,17 @@ class Exp(MyExp):
             wait_for_the_master,
             get_local_rank,
         )
+
         local_rank = get_local_rank()
 
         with wait_for_the_master(local_rank):
             dataset = VOCDetection(
                 data_dir=os.path.join(get_yolox_datadir(), "trainval", "VOCdevkit"),
-                image_sets=[('2007', 'trainval')],
+                image_sets=[("2007", "trainval")],
                 img_size=self.input_size,
                 preproc=TrainTransform(
-                    max_labels=50,
-                    flip_prob=self.flip_prob,
-                    hsv_prob=self.hsv_prob),
+                    max_labels=50, flip_prob=self.flip_prob, hsv_prob=self.hsv_prob
+                ),
                 cache=cache_img,
             )
 
@@ -86,9 +95,8 @@ class Exp(MyExp):
             mosaic=not no_aug,
             img_size=self.input_size,
             preproc=TrainTransform(
-                max_labels=120,
-                flip_prob=self.flip_prob,
-                hsv_prob=self.hsv_prob),
+                max_labels=120, flip_prob=self.flip_prob, hsv_prob=self.hsv_prob
+            ),
             degrees=self.degrees,
             translate=self.translate,
             mosaic_scale=self.mosaic_scale,
@@ -104,9 +112,7 @@ class Exp(MyExp):
         if is_distributed:
             batch_size = batch_size // dist.get_world_size()
 
-        sampler = InfiniteSampler(
-            len(self.dataset), seed=self.seed if self.seed else 0
-        )
+        sampler = InfiniteSampler(len(self.dataset), seed=self.seed if self.seed else 0)
 
         batch_sampler = YoloBatchSampler(
             sampler=sampler,
@@ -129,8 +135,8 @@ class Exp(MyExp):
         from yolox.data import VOCDetection, ValTransform
 
         valdataset = VOCDetection(
-            data_dir= os.path.join(get_yolox_datadir(), "test", "VOCdevkit"),
-            image_sets= [('2007', 'test')],
+            data_dir=os.path.join(get_yolox_datadir(), "test", "VOCdevkit"),
+            image_sets=[("2007", "test")],
             img_size=self.test_size,
             preproc=ValTransform(legacy=legacy),
         )
@@ -165,3 +171,6 @@ class Exp(MyExp):
             num_classes=self.num_classes,
         )
         return evaluator
+
+    def custom_eval(self, model, evaluator, is_distributed, half=False):
+        return evaluator.evaluate(model, is_distributed, half)

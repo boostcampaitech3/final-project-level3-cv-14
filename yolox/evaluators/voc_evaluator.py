@@ -13,7 +13,13 @@ import numpy as np
 
 import torch
 
-from yolox.utils import gather, is_main_process, postprocess, synchronize, time_synchronized
+from yolox.utils import (
+    gather,
+    is_main_process,
+    postprocess,
+    synchronize,
+    time_synchronized,
+)
 
 
 class VOCEvaluator:
@@ -91,6 +97,8 @@ class VOCEvaluator:
             model(x)
             model = model_trt
 
+        outputs_list = []
+        predictions_dic = {}
         for cur_iter, (imgs, _, info_imgs, ids) in enumerate(
             progress_bar(self.dataloader)
         ):
@@ -113,11 +121,13 @@ class VOCEvaluator:
                 outputs = postprocess(
                     outputs, self.num_classes, self.confthre, self.nmsthre
                 )
+                outputs_list += outputs
                 if is_time_record:
                     nms_end = time_synchronized()
                     nms_time += nms_end - infer_end
-
-            data_list.update(self.convert_to_voc_format(outputs, info_imgs, ids))
+            predictions = self.convert_to_voc_format(outputs, info_imgs, ids)
+            data_list.update(predictions)
+            predictions_dic.update(predictions)
 
         statistics = torch.cuda.FloatTensor([inference_time, nms_time, n_samples])
         if distributed:
@@ -127,7 +137,7 @@ class VOCEvaluator:
 
         eval_results = self.evaluate_prediction(data_list, statistics)
         synchronize()
-        return eval_results
+        return eval_results, outputs_list, predictions_dic
 
     def convert_to_voc_format(self, outputs, info_imgs, ids):
         predictions = {}

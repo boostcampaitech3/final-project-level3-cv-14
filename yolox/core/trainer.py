@@ -5,11 +5,13 @@
 import datetime
 import os
 import time
+import cv2
 from loguru import logger
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 from yolox.data import DataPrefetcher
 from yolox.exp import Exp
@@ -30,6 +32,7 @@ from yolox.utils import (
     save_checkpoint,
     setup_logger,
     synchronize,
+    vis,
 )
 
 
@@ -70,9 +73,36 @@ class Trainer:
             mode="a",
         )
 
-        self.preds_list = []
+        self.pred_dic = {}
         self.outputs_list = []
         self.files = []
+
+        # Artifact 이름 설정
+        self.artifact_name = "Test_Dataset_1"
+        # prediction images 저장할 path 지정
+        self.output_dir = "/opt/ml/final-project-level3-cv-14/output/"
+        self.cls_names = (
+            "aeroplane",
+            "bicycle",
+            "bird",
+            "boat",
+            "bottle",
+            "bus",
+            "car",
+            "cat",
+            "chair",
+            "cow",
+            "diningtable",
+            "dog",
+            "horse",
+            "motorbike",
+            "person",
+            "pottedplant",
+            "sheep",
+            "sofa",
+            "train",
+            "tvmonitor",
+        )
 
     def train(self):
         self.before_train()
@@ -196,9 +226,9 @@ class Trainer:
                     if k.startswith("wandb-"):
                         wandb_params.update({k.lstrip("wandb-"): v})
                 self.wandb_logger = WandbLogger(config=vars(self.exp), **wandb_params)
-                self.wandb_logger.log_metrics({"Params [M]": float(params[:-1])})
-                self.wandb_logger.log_metrics({"GFLOPs": float(gflops)})
-                self.wandb_logger.add_table(self.files)
+                self.wandb_logger.log_metrics(
+                    {"Params [M]": float(params[:-1]), "GFLOPs": float(gflops)}
+                )
             else:
                 raise ValueError("logger must be either 'tensorboard' or 'wandb'")
 
@@ -345,14 +375,23 @@ class Trainer:
                 outputs_list,
                 predictions_list,
             ) = self.exp.custom_eval(evalmodel, self.evaluator, self.is_distributed)
-            # (ap50_95, ap50, summary) = self.exp.eval(
-            #     evalmodel, self.evaluator, self.is_distributed
-            # )
 
         self.outputs_list = outputs_list
-        self.preds_list = predictions_list
-        print("outputs_list", outputs_list)
-        print("predictions_list", predictions_list)
+        self.pred_dic = predictions_list
+
+        print("making predicted images...")
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
+        for idx, image_path in tqdm(enumerate(self.files), total=len(self.files)):
+            img_name = image_path.split("/")[-1]
+            output = self.outputs_list[idx]
+            img_info = self.pred_dic[idx]
+            result_image = self.visual(output, img_info, idx)
+            cv2.imwrite(os.path.join(self.output_dir, img_name), result_image)
+
+        self.wandb_logger.add_table(
+            self.artifact_name, self.files, self.output_dir, self.epoch
+        )
 
         update_best_ckpt = ap50_95 > self.best_ap
         self.best_ap = max(self.best_ap, ap50_95)
@@ -413,3 +452,15 @@ class Trainer:
 
         image_names.sort()
         self.files = image_names
+
+    def visual(self, output, img_info, idx, cls_conf=0.35):
+        img = cv2.imread(self.files[idx])
+        if output is None:
+            return img
+        bboxes = img_info[0]
+
+        cls = img_info[1]
+        scores = img_info[2]
+
+        vis_res = vis(img, bboxes, scores, cls, cls_conf, self.cls_names)
+        return vis_res
