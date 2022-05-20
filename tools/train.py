@@ -59,6 +59,9 @@ def make_parser():
         "-s", "--seed", default=42, type=int, help="setting seed number"
     )
     parser.add_argument(
+        "-i", "--eval_interval", default=42, type=int, help="set evaluation interval"
+    )
+    parser.add_argument(
         "--machine_rank", default=0, type=int, help="node rank for multi-node training"
     )
     parser.add_argument(

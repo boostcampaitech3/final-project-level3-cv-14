@@ -26,6 +26,11 @@ class Exp(MyExp):
 
         self.depth = 0.33
         self.width = 0.25
+        self.backbone_dilated = True  # backbone의 Conv -> dilation 적용
+        self.backbone_attn = "SE"  # backbone - CSPLayer - Bottleneck의 attn
+        self.fpn_attn = "SE"  # yolopafpn - CSPLayer - Bottleneck의
+
+        # 아래는 수정할 필요 없음
         self.input_size = (416, 416)
         self.random_size = (10, 20)
         self.mosaic_scale = (0.5, 1.5)
@@ -34,10 +39,6 @@ class Exp(MyExp):
         self.enable_mixup = False
         self.dir_name = file_path[-2]
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
-
-        self.backbone_dilated = True  # backbone의 Conv -> dilation 적용
-        self.backbone_attn = "SE"  # backbone - CSPLayer - Bottleneck의 attn
-        self.fpn_attn = "SE"  # yolopafpn - CSPLayer - Bottleneck의
 
     def get_model(self, sublinear=False):
         def init_yolo(M):
