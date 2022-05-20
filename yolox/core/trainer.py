@@ -3,6 +3,7 @@
 # Copyright (c) Megvii, Inc. and its affiliates.
 
 import datetime
+import json
 import os
 import time
 import cv2
@@ -78,9 +79,12 @@ class Trainer:
         self.files = []
 
         # Artifact 이름 설정
-        self.artifact_name = "Test_Dataset_1"
+        self.artifact_name = "Test_Dataset_3"
         # prediction images 저장할 path 지정
         self.output_dir = "/opt/ml/final-project-level3-cv-14/output/"
+        # id에 맞는 이미지 안에 있는 클래스 종류
+        self.id2classes = {}
+        self.gt_output_dir = "/opt/ml/final-project-level3-cv-14/gt_output/"
         self.cls_names = (
             "aeroplane",
             "bicycle",
@@ -389,7 +393,12 @@ class Trainer:
             cv2.imwrite(os.path.join(self.output_dir, img_name), result_image)
 
         self.wandb_logger.add_table(
-            self.artifact_name, self.files, self.output_dir, self.epoch
+            self.artifact_name,
+            self.files,
+            self.output_dir,
+            self.epoch,
+            self.gt_output_dir,
+            self.id2classes,
         )
 
         update_best_ckpt = ap50_95 > self.best_ap
@@ -451,6 +460,8 @@ class Trainer:
 
         image_names.sort()
         self.files = image_names
+        with open("./utils/id2classes.json", "r") as f:
+            self.id2classes = json.load(f)
 
     def visual(self, output, img_info, idx, cls_conf=0.35):
         img = cv2.imread(self.files[idx])
