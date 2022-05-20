@@ -3,17 +3,16 @@
 
 ####################### 이 부분만 수정하세요! #######################
 
-# 복사한 템플릿 폴더 이름만 적으시면 됩니다.
-DIR_NAME='[name0]name_of_experiments'
-BATCH_SIZE=64
-SEED=42
+DIR_NAME='[name0]name_of_experiments' # 템플릿 폴더 이름
+BATCH_SIZE=64 # 배치 사이즈
+SEED=42 # 시드 설정
 EVAL_INTERVAL=10
 
 # WANDB Setting
-WANDB_LOG=true #
-PROJECT_NAME='test' # Wandb Project Name
+WANDB_LOG=true # true 값으로 설정해야 Wandb에 로그가 올라갑니다.
+PROJECT_NAME='YOLOX_NANO_TRAIN_NOTA' # Wandb Project Name
 
-####################### 윗 부분만 수정하세요! #######################
+################################ END ################################
 
 if [ "$WANDB_LOG" = true ] ; then
     python tools/train.py -f yolox/models/$DIR_NAME/yolox_nano_exp.py -i $EVAL_INTERVAL -s $SEED -b $BATCH_SIZE --logger wandb wandb-project $PROJECT_NAME wandb-name $DIR_NAME
