@@ -228,3 +228,6 @@ wandb
 
 # output
 output
+
+# GT outputs
+gt_output
