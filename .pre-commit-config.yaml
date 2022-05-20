@@ -16,3 +16,6 @@ repos:
     rev: 3.9.2
     hooks:
     - id: flake8
+      args:
+        - "--max-line-length=120"
+        - "--ignore=F403,F405,W503"
