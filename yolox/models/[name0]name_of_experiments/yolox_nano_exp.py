@@ -11,6 +11,13 @@ import torch.distributed as dist
 from yolox.data import get_yolox_datadir
 from yolox.exp import Exp as MyExp
 
+file_path = os.path.realpath(__file__).split("/")
+
+package = f"yolox.models.{file_path[-2]}"
+name = "YOLOX"
+name1 = "YOLOPAFPN"
+name2 = "YOLOXHead"
+
 
 class Exp(MyExp):
     def __init__(self):
@@ -19,18 +26,19 @@ class Exp(MyExp):
 
         self.depth = 0.33
         self.width = 0.25
+        self.backbone_dilated = True  # backbone의 Conv -> dilation 적용
+        self.backbone_attn = "SE"  # backbone - CSPLayer - Bottleneck의 attn
+        self.fpn_attn = "SE"  # yolopafpn - CSPLayer - Bottleneck의
+
+        # 아래는 수정할 필요 없음
         self.input_size = (416, 416)
         self.random_size = (10, 20)
         self.mosaic_scale = (0.5, 1.5)
         self.test_size = (416, 416)
         self.mosaic_prob = 0.5
         self.enable_mixup = False
-
+        self.dir_name = file_path[-2]
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
-
-        self.backbone_dilated = True  # backbone의 Conv -> dilation 적용
-        self.backbone_attn = "SE"  # backbone - CSPLayer - Bottleneck의 attn
-        self.fpn_attn = "SE"  # yolopafpn - CSPLayer - Bottleneck의
 
     def get_model(self, sublinear=False):
         def init_yolo(M):
@@ -40,7 +48,9 @@ class Exp(MyExp):
                     m.momentum = 0.03
 
         if "model" not in self.__dict__:
-            from yolox.models.exp_sample import YOLOX, YOLOPAFPN, YOLOXHead
+            YOLOX = getattr(__import__(package, fromlist=[name]), name)
+            YOLOPAFPN = getattr(__import__(package, fromlist=[name1]), name1)
+            YOLOXHead = getattr(__import__(package, fromlist=[name2]), name2)
 
             in_channels = [256, 512, 1024]
             # NANO model use depthwise = True, which is main difference.

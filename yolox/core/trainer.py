@@ -61,7 +61,7 @@ class Trainer:
 
         # metric record
         self.meter = MeterBuffer(window_size=exp.print_interval)
-        self.file_name = os.path.join(exp.output_dir, args.experiment_name)
+        self.file_name = os.path.join(exp.output_dir, exp.dir_name)
 
         if self.rank == 0:
             os.makedirs(self.file_name, exist_ok=True)
@@ -80,7 +80,7 @@ class Trainer:
         # Artifact 이름 설정
         self.artifact_name = "Test_Dataset_1"
         # prediction images 저장할 path 지정
-        self.output_dir = "/opt/ml/final-project-level3-cv-14/output/"
+        self.output_dir = "./output/"
         self.cls_names = (
             "aeroplane",
             "bicycle",
@@ -222,8 +222,12 @@ class Trainer:
             elif self.args.logger == "wandb":
                 wandb_params = dict()
                 for k, v in zip(self.args.opts[0::2], self.args.opts[1::2]):
+                    print(k, v)
                     if k.startswith("wandb-"):
-                        wandb_params.update({k.lstrip("wandb-"): v})
+                        if k.lstrip("wandb-") == "me":
+                            wandb_params.update({"name": v})
+                        else:
+                            wandb_params.update({k.lstrip("wandb-"): v})
                 self.wandb_logger = WandbLogger(config=vars(self.exp), **wandb_params)
                 self.wandb_logger.log_metrics(
                     {"Params [M]": float(params[:-1]), "GFLOPs": float(gflops)}
@@ -255,14 +259,19 @@ class Trainer:
                 self.model.module.head.use_l1 = True
             else:
                 self.model.head.use_l1 = True
-            self.exp.eval_interval = 1
+            # self.args.eval_interval = 1
             if not self.no_aug:
                 self.save_ckpt(ckpt_name="last_mosaic_epoch")
 
     def after_epoch(self):
         self.save_ckpt(ckpt_name="latest")
 
-        if (self.epoch + 1) % self.exp.eval_interval == 0:
+        if (self.epoch + 1) == self.max_epoch:
+            all_reduce_norm(self.model)
+            self.evaluate_and_save_model()
+            self.predict_images()
+            self.add_artifact_table()
+        elif (self.epoch + 1) % self.args.eval_interval == 0:
             all_reduce_norm(self.model)
             self.evaluate_and_save_model()
 
@@ -374,10 +383,32 @@ class Trainer:
                 outputs_list,
                 predictions_list,
             ) = self.exp.custom_eval(evalmodel, self.evaluator, self.is_distributed)
-
         self.outputs_list = outputs_list
         self.pred_dic = predictions_list
 
+        update_best_ckpt = ap50_95 > self.best_ap
+        self.best_ap = max(self.best_ap, ap50_95)
+
+        if self.rank == 0:
+            if self.args.logger == "tensorboard":
+                self.tblogger.add_scalar("mAP50", ap50, self.epoch + 1)
+                self.tblogger.add_scalar("mAP50_95", ap50_95, self.epoch + 1)
+            if self.args.logger == "wandb":
+                self.wandb_logger.log_metrics(
+                    {
+                        "mAP50": ap50,
+                        "mAP50_95": ap50_95,
+                        "epoch": self.epoch + 1,
+                    }
+                )
+            logger.info("\n" + summary)
+        synchronize()
+
+        self.save_ckpt("last_epoch", update_best_ckpt)
+        if self.save_history_ckpt:
+            self.save_ckpt(f"epoch_{self.epoch + 1}")
+
+    def predict_images(self):
         print("making predicted images...")
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
@@ -388,31 +419,10 @@ class Trainer:
             result_image = self.visual(output, img_info, idx)
             cv2.imwrite(os.path.join(self.output_dir, img_name), result_image)
 
+    def add_artifact_table(self):
         self.wandb_logger.add_table(
-            self.artifact_name, self.files, self.output_dir, self.epoch
+            self.artifact_name, self.files, self.output_dir, self.epoch + 1
         )
-
-        update_best_ckpt = ap50_95 > self.best_ap
-        self.best_ap = max(self.best_ap, ap50_95)
-
-        if self.rank == 0:
-            if self.args.logger == "tensorboard":
-                self.tblogger.add_scalar("val/COCOAP50", ap50, self.epoch + 1)
-                self.tblogger.add_scalar("val/COCOAP50_95", ap50_95, self.epoch + 1)
-            if self.args.logger == "wandb":
-                self.wandb_logger.log_metrics(
-                    {
-                        "val/VOCAP50": ap50,
-                        "val/VOCAP50_95": ap50_95,
-                        "epoch": self.epoch + 1,
-                    }
-                )
-            logger.info("\n" + summary)
-        synchronize()
-
-        self.save_ckpt("last_epoch", update_best_ckpt)
-        if self.save_history_ckpt:
-            self.save_ckpt(f"epoch_{self.epoch + 1}")
 
     def save_ckpt(self, ckpt_name, update_best_ckpt=False):
         if self.rank == 0:
@@ -438,8 +448,9 @@ class Trainer:
 
     def get_image_list(
         self,
-        path="/opt/ml/final-project-level3-cv-14/datasets/test/VOCdevkit/VOC2007/JPEGImages",
+        path="./datasets/test/VOCdevkit/VOC2007/JPEGImages",
     ):
+        print("Getting image lists...")
         IMAGE_EXT = [".jpg", ".jpeg", ".webp", ".bmp", ".png"]
         image_names = []
         for maindir, subdir, file_name_list in os.walk(path):
@@ -451,6 +462,7 @@ class Trainer:
 
         image_names.sort()
         self.files = image_names
+        print("Getting image done...")
 
     def visual(self, output, img_info, idx, cls_conf=0.35):
         img = cv2.imread(self.files[idx])
