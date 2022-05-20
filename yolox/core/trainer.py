@@ -61,7 +61,7 @@ class Trainer:
 
         # metric record
         self.meter = MeterBuffer(window_size=exp.print_interval)
-        self.file_name = os.path.join(exp.output_dir, args.experiment_name)
+        self.file_name = os.path.join(exp.output_dir, exp.dir_name)
 
         if self.rank == 0:
             os.makedirs(self.file_name, exist_ok=True)
@@ -222,8 +222,12 @@ class Trainer:
             elif self.args.logger == "wandb":
                 wandb_params = dict()
                 for k, v in zip(self.args.opts[0::2], self.args.opts[1::2]):
+                    print(k, v)
                     if k.startswith("wandb-"):
-                        wandb_params.update({k.lstrip("wandb-"): v})
+                        if k.lstrip("wandb-") == "me":
+                            wandb_params.update({"name": v})
+                        else:
+                            wandb_params.update({k.lstrip("wandb-"): v})
                 self.wandb_logger = WandbLogger(config=vars(self.exp), **wandb_params)
                 self.wandb_logger.log_metrics(
                     {"Params [M]": float(params[:-1]), "GFLOPs": float(gflops)}

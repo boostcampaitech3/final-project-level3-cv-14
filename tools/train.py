@@ -56,6 +56,9 @@ def make_parser():
         "--num_machines", default=1, type=int, help="num of node for training"
     )
     parser.add_argument(
+        "-s", "--seed", default=42, type=int, help="setting seed number"
+    )
+    parser.add_argument(
         "--machine_rank", default=0, type=int, help="node rank for multi-node training"
     )
     parser.add_argument(
@@ -85,7 +88,7 @@ def make_parser():
         "--logger",
         type=str,
         help="Logger to be used for metrics",
-        default="tensorboard"
+        default="tensorboard",
     )
     parser.add_argument(
         "opts",
@@ -98,12 +101,12 @@ def make_parser():
 
 @logger.catch
 def main(exp: Exp, args):
-    if exp.seed is not None:
-        random.seed(exp.seed)
-        torch.manual_seed(exp.seed)
+    if args.seed is not None:
+        random.seed(args.seed)
+        torch.manual_seed(args.seed)
         cudnn.deterministic = True
         warnings.warn(
-            "You have chosen to seed training. This will turn on the CUDNN deterministic setting, "
+            f"You have chosen to seed [{args.seed}] training. This will turn on the CUDNN deterministic setting, "
             "which can slow down your training considerably! You may see unexpected behavior "
             "when restarting from checkpoints."
         )
