@@ -167,10 +167,9 @@ class Trainer:
         # model related init
         torch.cuda.set_device(self.local_rank)
         model = self.exp.get_model()
-        logger.info(
-            "Model Summary: {}".format(get_model_info(model, self.exp.test_size))
-        )
-        infos = get_model_info(model, self.exp.test_size).split(", ")
+        model_info = get_model_info(model, self.exp.test_size)
+        logger.info("Model Summary: {}".format(model_info))
+        infos = model_info.split(", ")
         params = infos[0].split(": ")[1]
         gflops = infos[1].split(": ")[1]
 
@@ -403,8 +402,8 @@ class Trainer:
             if self.args.logger == "wandb":
                 self.wandb_logger.log_metrics(
                     {
-                        "val/COCOAP50": ap50,
-                        "val/COCOAP50_95": ap50_95,
+                        "val/VOCAP50": ap50,
+                        "val/VOCAP50_95": ap50_95,
                         "epoch": self.epoch + 1,
                     }
                 )
