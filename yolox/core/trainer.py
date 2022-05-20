@@ -5,11 +5,13 @@
 import datetime
 import os
 import time
+import cv2
 from loguru import logger
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 from yolox.data import DataPrefetcher
 from yolox.exp import Exp
@@ -29,7 +31,8 @@ from yolox.utils import (
     occupy_mem,
     save_checkpoint,
     setup_logger,
-    synchronize
+    synchronize,
+    vis,
 )
 
 
@@ -68,6 +71,37 @@ class Trainer:
             distributed_rank=self.rank,
             filename="train_log.txt",
             mode="a",
+        )
+
+        self.pred_dic = {}
+        self.outputs_list = []
+        self.files = []
+
+        # Artifact 이름 설정
+        self.artifact_name = "Test_Dataset_1"
+        # prediction images 저장할 path 지정
+        self.output_dir = "/opt/ml/final-project-level3-cv-14/output/"
+        self.cls_names = (
+            "aeroplane",
+            "bicycle",
+            "bird",
+            "boat",
+            "bottle",
+            "bus",
+            "car",
+            "cat",
+            "chair",
+            "cow",
+            "diningtable",
+            "dog",
+            "horse",
+            "motorbike",
+            "person",
+            "pottedplant",
+            "sheep",
+            "sofa",
+            "train",
+            "tvmonitor",
         )
 
     def train(self):
@@ -133,9 +167,12 @@ class Trainer:
         # model related init
         torch.cuda.set_device(self.local_rank)
         model = self.exp.get_model()
-        logger.info(
-            "Model Summary: {}".format(get_model_info(model, self.exp.test_size))
-        )
+        model_info = get_model_info(model, self.exp.test_size)
+        logger.info("Model Summary: {}".format(model_info))
+        infos = model_info.split(", ")
+        params = infos[0].split(": ")[1]
+        gflops = infos[1].split(": ")[1]
+
         model.to(self.device)
 
         # solver related init
@@ -177,14 +214,20 @@ class Trainer:
         )
         # Tensorboard and Wandb loggers
         if self.rank == 0:
+            self.get_image_list()
             if self.args.logger == "tensorboard":
-                self.tblogger = SummaryWriter(os.path.join(self.file_name, "tensorboard"))
+                self.tblogger = SummaryWriter(
+                    os.path.join(self.file_name, "tensorboard")
+                )
             elif self.args.logger == "wandb":
                 wandb_params = dict()
                 for k, v in zip(self.args.opts[0::2], self.args.opts[1::2]):
                     if k.startswith("wandb-"):
                         wandb_params.update({k.lstrip("wandb-"): v})
                 self.wandb_logger = WandbLogger(config=vars(self.exp), **wandb_params)
+                self.wandb_logger.log_metrics(
+                    {"Params [M]": float(params[:-1]), "GFLOPs": float(gflops)}
+                )
             else:
                 raise ValueError("logger must be either 'tensorboard' or 'wandb'")
 
@@ -193,7 +236,9 @@ class Trainer:
 
     def after_train(self):
         logger.info(
-            "Training of experiment is done and the best AP is {:.2f}".format(self.best_ap * 100)
+            "Training of experiment is done and the best AP is {:.2f}".format(
+                self.best_ap * 100
+            )
         )
         if self.rank == 0:
             if self.args.logger == "wandb":
@@ -263,7 +308,9 @@ class Trainer:
 
             if self.rank == 0:
                 if self.args.logger == "wandb":
-                    self.wandb_logger.log_metrics({k: v.latest for k, v in loss_meter.items()})
+                    self.wandb_logger.log_metrics(
+                        {k: v.latest for k, v in loss_meter.items()}
+                    )
                     self.wandb_logger.log_metrics({"lr": self.meter["lr"].latest})
 
             self.meter.clear_meters()
@@ -322,9 +369,28 @@ class Trainer:
                 evalmodel = evalmodel.module
 
         with adjust_status(evalmodel, training=False):
-            ap50_95, ap50, summary = self.exp.eval(
-                evalmodel, self.evaluator, self.is_distributed
-            )
+            (
+                (ap50_95, ap50, summary),
+                outputs_list,
+                predictions_list,
+            ) = self.exp.custom_eval(evalmodel, self.evaluator, self.is_distributed)
+
+        self.outputs_list = outputs_list
+        self.pred_dic = predictions_list
+
+        print("making predicted images...")
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
+        for idx, image_path in tqdm(enumerate(self.files), total=len(self.files)):
+            img_name = image_path.split("/")[-1]
+            output = self.outputs_list[idx]
+            img_info = self.pred_dic[idx]
+            result_image = self.visual(output, img_info, idx)
+            cv2.imwrite(os.path.join(self.output_dir, img_name), result_image)
+
+        self.wandb_logger.add_table(
+            self.artifact_name, self.files, self.output_dir, self.epoch
+        )
 
         update_best_ckpt = ap50_95 > self.best_ap
         self.best_ap = max(self.best_ap, ap50_95)
@@ -334,11 +400,13 @@ class Trainer:
                 self.tblogger.add_scalar("val/COCOAP50", ap50, self.epoch + 1)
                 self.tblogger.add_scalar("val/COCOAP50_95", ap50_95, self.epoch + 1)
             if self.args.logger == "wandb":
-                self.wandb_logger.log_metrics({
-                    "val/COCOAP50": ap50,
-                    "val/COCOAP50_95": ap50_95,
-                    "epoch": self.epoch + 1,
-                })
+                self.wandb_logger.log_metrics(
+                    {
+                        "val/VOCAP50": ap50,
+                        "val/VOCAP50_95": ap50_95,
+                        "epoch": self.epoch + 1,
+                    }
+                )
             logger.info("\n" + summary)
         synchronize()
 
@@ -364,4 +432,34 @@ class Trainer:
             )
 
             if self.args.logger == "wandb":
-                self.wandb_logger.save_checkpoint(self.file_name, ckpt_name, update_best_ckpt)
+                self.wandb_logger.save_checkpoint(
+                    self.file_name, ckpt_name, update_best_ckpt
+                )
+
+    def get_image_list(
+        self,
+        path="/opt/ml/final-project-level3-cv-14/datasets/test/VOCdevkit/VOC2007/JPEGImages",
+    ):
+        IMAGE_EXT = [".jpg", ".jpeg", ".webp", ".bmp", ".png"]
+        image_names = []
+        for maindir, subdir, file_name_list in os.walk(path):
+            for filename in file_name_list:
+                apath = os.path.join(maindir, filename)
+                ext = os.path.splitext(apath)[1]
+                if ext in IMAGE_EXT:
+                    image_names.append(apath)
+
+        image_names.sort()
+        self.files = image_names
+
+    def visual(self, output, img_info, idx, cls_conf=0.35):
+        img = cv2.imread(self.files[idx])
+        if output is None:
+            return img
+        bboxes = img_info[0]
+
+        cls = img_info[1]
+        scores = img_info[2]
+
+        vis_res = vis(img, bboxes, scores, cls, cls_conf, self.cls_names)
+        return vis_res

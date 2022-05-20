@@ -8,6 +8,7 @@ import sys
 from loguru import logger
 
 import torch
+from tqdm import tqdm
 
 
 def get_caller_name(depth=0):
@@ -109,14 +110,17 @@ class WandbLogger(object):
     For more information, please refer to:
     https://docs.wandb.ai/guides/track
     """
-    def __init__(self,
-                 project=None,
-                 name=None,
-                 id=None,
-                 entity=None,
-                 save_dir=None,
-                 config=None,
-                 **kwargs):
+
+    def __init__(
+        self,
+        project=None,
+        name=None,
+        id=None,
+        entity=None,
+        save_dir=None,
+        config=None,
+        **kwargs,
+    ):
         """
         Args:
             project (str): wandb project name.
@@ -129,12 +133,12 @@ class WandbLogger(object):
         """
         try:
             import wandb
+
             self.wandb = wandb
         except ModuleNotFoundError:
             raise ModuleNotFoundError(
-                "wandb is not installed."
-                "Please install wandb using pip install wandb"
-                )
+                "wandb is not installed." "Please install wandb using pip install wandb"
+            )
 
         self.project = project
         self.name = name
@@ -150,7 +154,7 @@ class WandbLogger(object):
             id=self.id,
             entity=self.entity,
             dir=self.save_dir,
-            resume="allow"
+            resume="allow",
         )
         self._wandb_init.update(**kwargs)
 
@@ -200,10 +204,7 @@ class WandbLogger(object):
             is_best (bool): whether the model is the best model.
         """
         filename = os.path.join(save_dir, model_name + "_ckpt.pth")
-        artifact = self.wandb.Artifact(
-            name=f"model-{self.run.id}",
-            type="model"
-        )
+        artifact = self.wandb.Artifact(name=f"model-{self.run.id}", type="model")
         artifact.add_file(filename, name="model_ckpt.pth")
 
         aliases = ["latest"]
@@ -215,3 +216,35 @@ class WandbLogger(object):
 
     def finish(self):
         self.run.finish()
+
+    def add_table(self, artifact_name, raw_images, output_dir, epoch):
+        # create an artifact for all the raw data
+        artifact = self.wandb.Artifact(artifact_name, type="raw_data")
+
+        # Setup a WandB Table object to hold our dataset
+        columns = ["id", "raw", "pred"]
+        # add a column for the pixel fraction of each class label
+        table = self.wandb.Table(columns=columns)
+
+        # SRC_DIR contains 10 folders, one for each of 10 class labels
+        # each folder contains images of the corresponding class
+
+        print("making a table...")
+        for idx, image_path in tqdm(enumerate(raw_images), total=len(raw_images)):
+            img_name = image_path.split("/")[-1]
+            pred_img_path = os.path.join(output_dir, img_name)
+
+            artifact.add_file(pred_img_path, name=img_name)
+
+            # Finally, we add a row of our newly constructed data.
+            train_id = img_name.split(".")[0]
+            raw_img = self.wandb.Image(image_path)
+            pred_img = self.wandb.Image(pred_img_path)
+            row = [train_id, raw_img, pred_img]
+            table.add_data(*row)
+
+        # .add the table to the artifact
+        artifact.add(table, f"epoch_{epoch+1}_pred_results")
+
+        # save artifact to W&B
+        self.run.log_artifact(artifact)
