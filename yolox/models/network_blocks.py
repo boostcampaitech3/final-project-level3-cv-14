@@ -92,14 +92,14 @@ class Bottleneck(nn.Module):
         in_channels,
         out_channels,
         shortcut=True,
-        expansion=0.5,
+        bottleneck_expansion=0.5,
         depthwise=False,
         dilated=False,
         act="silu",
         attn=None,
     ):
         super().__init__()
-        hidden_channels = int(out_channels * expansion)
+        hidden_channels = int(out_channels * bottleneck_expansion)
         # Conv = DWConv if depthwise else BaseConv
         if depthwise:
             if dilated:
@@ -118,7 +118,9 @@ class Bottleneck(nn.Module):
         if attn is None:
             self.attn = nn.Identity()
         elif attn == "SE":  # Squeeze & Excitation attention
-            self.attn = SELayer(in_channels, out_channels, reduction=int(1 / expansion))
+            self.attn = SELayer(
+                in_channels, out_channels, reduction=int(1 / bottleneck_expansion)
+            )
 
     def forward(self, x):
         y = self.attn(self.conv2(self.conv1(x)))
@@ -180,6 +182,7 @@ class CSPLayer(nn.Module):
         n=1,
         shortcut=True,
         expansion=0.5,
+        bottleneck_expansion=1.0,
         depthwise=False,
         dilated=False,
         act="silu",
@@ -202,7 +205,7 @@ class CSPLayer(nn.Module):
                 hidden_channels,
                 hidden_channels,
                 shortcut,
-                1.0,
+                bottleneck_expansion,
                 depthwise,
                 dilated,
                 act=act,
@@ -349,14 +352,14 @@ class Mobile_Bottleneck(nn.Module):
         in_channels,
         out_channels,
         shortcut=True,
-        expansion=0.5,
+        bottleneck_expansion=0.5,
         depthwise=False,
         dilated=False,
         act="silu",
         attn=None,
     ):
         super().__init__()
-        hidden_channels = int(out_channels * expansion)
+        hidden_channels = int(out_channels * bottleneck_expansion)
 
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels, in_channels, 3, 1, 1, groups=in_channels),
@@ -378,7 +381,9 @@ class Mobile_Bottleneck(nn.Module):
         if attn is None:
             self.attn = nn.Identity()
         elif attn == "SE":  # Squeeze & Excitation attention
-            self.attn = SELayer(in_channels, out_channels, reduction=int(1 / expansion))
+            self.attn = SELayer(
+                in_channels, out_channels, reduction=int(1 / bottleneck_expansion)
+            )
         self.use_add = shortcut and in_channels == out_channels
 
     def forward(self, x):
@@ -402,6 +407,7 @@ class Mobile_CSPLayer(nn.Module):
         n=1,
         shortcut=True,
         expansion=0.5,
+        bottleneck_expansion=1.0,
         depthwise=False,
         dilated=False,
         act="silu",
@@ -424,7 +430,7 @@ class Mobile_CSPLayer(nn.Module):
                 hidden_channels,
                 hidden_channels,
                 shortcut,
-                1.0,
+                bottleneck_expansion,
                 depthwise,
                 dilated,
                 act=act,

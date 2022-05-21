@@ -26,9 +26,11 @@ class Exp(MyExp):
 
         self.depth = 0.33
         self.width = 0.25
-        self.backbone_dilated = True  # backbone의 Conv -> dilation 적용
-        self.backbone_attn = "SE"  # backbone - CSPLayer - Bottleneck의 attn
-        self.fpn_attn = "SE"  # yolopafpn - CSPLayer - Bottleneck의
+        self.backbone_dilated = False  # backbone의 Conv -> dilation 적용
+        self.backbone_attn = None  # backbone - CSPLayer - Bottleneck의 attn
+        self.fpn_attn = None  # yolopafpn - CSPLayer - Bottleneck의
+        self.expansion = 0.5
+        self.bottleneck_expansion = 1.0
 
         # 아래는 수정할 필요 없음
         self.input_size = (416, 416)
@@ -63,6 +65,8 @@ class Exp(MyExp):
                 backbone_dilated=self.backbone_dilated,
                 backbone_attn=self.backbone_attn,
                 fpn_attn=self.fpn_attn,
+                expansion=self.expansion,
+                bottleneck_expansion=self.bottleneck_expansion,
             )
             head = YOLOXHead(
                 self.num_classes,
