@@ -104,6 +104,8 @@ class CSPDarknet(nn.Module):
         dilated=False,
         act="silu",
         attn=None,
+        expansion=0.5,
+        bottleneck_expansion=1.0,
     ):
         super().__init__()
         assert out_features, "please provide output features of Darknet"
@@ -136,6 +138,8 @@ class CSPDarknet(nn.Module):
                 dilated=dilated,
                 act=act,
                 attn=attn,
+                expansion=expansion,
+                bottleneck_expansion=bottleneck_expansion,
             ),
         )
 
@@ -150,6 +154,8 @@ class CSPDarknet(nn.Module):
                 dilated=dilated,
                 act=act,
                 attn=attn,
+                expansion=expansion,
+                bottleneck_expansion=bottleneck_expansion,
             ),
         )
 
@@ -164,6 +170,8 @@ class CSPDarknet(nn.Module):
                 dilated=dilated,
                 act=act,
                 attn=attn,
+                expansion=expansion,
+                bottleneck_expansion=bottleneck_expansion,
             ),
         )
 
@@ -180,6 +188,8 @@ class CSPDarknet(nn.Module):
                 dilated=dilated,
                 act=act,
                 attn=attn,
+                expansion=expansion,
+                bottleneck_expansion=bottleneck_expansion,
             ),
         )
 
