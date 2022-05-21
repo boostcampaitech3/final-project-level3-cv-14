@@ -32,6 +32,7 @@ class Exp(MyExp):
         self.expansion = 0.5
         self.bottleneck_expansion = 1.0
 
+
         # 아래는 수정할 필요 없음
         self.input_size = (416, 416)
         self.random_size = (10, 20)
