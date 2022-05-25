@@ -450,7 +450,10 @@ class Mobile_CSPLayer(nn.Module):
 class GhostConv(nn.Module):
     """
     GhostNet: More Features from Cheap Operations (2020)
-    BaseConv block 대신 적용이 가능하며 기존보다 FLOPs와 Params 수가 크게 줄음
+    ================================================================================
+    Convolution out_channels를 ratio만큼만 적용하고 나머지는 linear transform으로 진행
+    BaseConv block 대신 적용이 가능
+    입력으로 들어오는 out_channels가 홀수일 경우 에러가 날 수 있음.
     A GhostConv2d -> Batchnorm -> silu/leaky relu block
     """
     def __init__(
