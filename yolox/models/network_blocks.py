@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import math
 
+
 class SiLU(nn.Module):
     """export-friendly version of nn.SiLU()"""
 
@@ -187,6 +188,7 @@ class CSPLayer(nn.Module):
         dilated=False,
         act="silu",
         attn=None,
+        c_attn=None,
     ):
         """
         Args:
@@ -215,12 +217,19 @@ class CSPLayer(nn.Module):
         ]
         self.m = nn.Sequential(*module_list)
 
+        if c_attn is None:
+            self.attn = nn.Identity()
+        elif c_attn == "SE":  # Squeeze & Excitation attention
+            self.attn = SELayer(
+                out_channels, out_channels, reduction=int(1 / bottleneck_expansion)
+            )
+
     def forward(self, x):
         x_1 = self.conv1(x)
         x_2 = self.conv2(x)
         x_1 = self.m(x_1)
         x = torch.cat((x_1, x_2), dim=1)
-        return self.conv3(x)
+        return self.attn(self.conv3(x))
 
 
 class Focus(nn.Module):
@@ -447,6 +456,7 @@ class Mobile_CSPLayer(nn.Module):
         x = torch.cat((x_1, x_2), dim=1)
         return self.conv3(x)
 
+
 class GhostConv(nn.Module):
     """
     GhostNet: More Features from Cheap Operations (2020)
@@ -456,6 +466,7 @@ class GhostConv(nn.Module):
     입력으로 들어오는 out_channels가 홀수일 경우 에러가 날 수 있음.
     A GhostConv2d -> Batchnorm -> silu/leaky relu block
     """
+
     def __init__(
         self,
         in_channels,
@@ -469,21 +480,30 @@ class GhostConv(nn.Module):
         dilation=1,
     ):
         super().__init__()
-        
+
         self.oup = out_channels
         init_channels = math.ceil(out_channels / ratio)
-        new_channels = init_channels*(ratio-1)
+        new_channels = init_channels * (ratio - 1)
 
         self.primary_conv = nn.Sequential(
-            nn.Conv2d(in_channels, init_channels, ksize, stride, ksize//2, bias=False),
+            nn.Conv2d(
+                in_channels, init_channels, ksize, stride, ksize // 2, bias=False
+            ),
             nn.BatchNorm2d(init_channels),
             nn.ReLU(inplace=True),
         )
 
         self.cheap_operation = nn.Sequential(
-            nn.Conv2d(init_channels, new_channels, dw_size, 1, dw_size//2, groups=init_channels, bias=False),
+            nn.Conv2d(
+                init_channels,
+                new_channels,
+                dw_size,
+                1,
+                dw_size // 2,
+                groups=init_channels,
+                bias=False,
+            ),
         )
-
 
         self.bn = nn.BatchNorm2d(out_channels)
         self.act = get_activation(act, inplace=True)
@@ -491,15 +511,15 @@ class GhostConv(nn.Module):
     def forward(self, x):
         x1 = self.primary_conv(x)
         x2 = self.cheap_operation(x1)
-        out = torch.cat([x1,x2], dim=1)
-        out = out[:,:self.oup,:,:]
+        out = torch.cat([x1, x2], dim=1)
+        out = out[:, : self.oup, :, :]
 
         return self.act(self.bn(out))
 
     def fuseforward(self, x):
         x1 = self.primary_conv(x)
         x2 = self.cheap_operation(x1)
-        out = torch.cat([x1,x2], dim=1)
-        out = out[:,:self.oup,:,:]
+        out = torch.cat([x1, x2], dim=1)
+        out = out[:, : self.oup, :, :]
 
         return self.act(out)
