@@ -3,6 +3,7 @@
 # Copyright (c) Megvii, Inc. and its affiliates.
 
 import datetime
+import json
 import os
 import time
 import cv2
@@ -78,9 +79,12 @@ class Trainer:
         self.files = []
 
         # Artifact 이름 설정
-        self.artifact_name = "Test_Dataset_1"
+        self.artifact_name = "Test_Dataset_3"
         # prediction images 저장할 path 지정
         self.output_dir = "./output/"
+        # id에 맞는 이미지 안에 있는 클래스 종류
+        self.id2classes = {}
+        self.gt_output_dir = "./gt_output/"
         self.cls_names = (
             "aeroplane",
             "bicycle",
@@ -421,7 +425,12 @@ class Trainer:
 
     def add_artifact_table(self):
         self.wandb_logger.add_table(
-            self.artifact_name, self.files, self.output_dir, self.epoch + 1
+            self.artifact_name,
+            self.files,
+            self.output_dir,
+            self.epoch + 1,
+            self.gt_output_dir,
+            self.id2classes,
         )
 
     def save_ckpt(self, ckpt_name, update_best_ckpt=False):
@@ -462,6 +471,8 @@ class Trainer:
 
         image_names.sort()
         self.files = image_names
+        with open("./utils/id2classes.json", "r") as f:
+            self.id2classes = json.load(f)
         print("Getting image done...")
 
     def visual(self, output, img_info, idx, cls_conf=0.35):

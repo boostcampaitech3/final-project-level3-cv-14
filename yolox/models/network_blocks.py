@@ -4,7 +4,7 @@
 
 import torch
 import torch.nn as nn
-
+import math
 
 class SiLU(nn.Module):
     """export-friendly version of nn.SiLU()"""
@@ -92,14 +92,14 @@ class Bottleneck(nn.Module):
         in_channels,
         out_channels,
         shortcut=True,
-        expansion=0.5,
+        bottleneck_expansion=0.5,
         depthwise=False,
         dilated=False,
         act="silu",
         attn=None,
     ):
         super().__init__()
-        hidden_channels = int(out_channels * expansion)
+        hidden_channels = int(out_channels * bottleneck_expansion)
         # Conv = DWConv if depthwise else BaseConv
         if depthwise:
             if dilated:
@@ -118,7 +118,9 @@ class Bottleneck(nn.Module):
         if attn is None:
             self.attn = nn.Identity()
         elif attn == "SE":  # Squeeze & Excitation attention
-            self.attn = SELayer(in_channels, out_channels, reduction=int(1 / expansion))
+            self.attn = SELayer(
+                in_channels, out_channels, reduction=int(1 / bottleneck_expansion)
+            )
 
     def forward(self, x):
         y = self.attn(self.conv2(self.conv1(x)))
@@ -180,6 +182,7 @@ class CSPLayer(nn.Module):
         n=1,
         shortcut=True,
         expansion=0.5,
+        bottleneck_expansion=1.0,
         depthwise=False,
         dilated=False,
         act="silu",
@@ -202,7 +205,7 @@ class CSPLayer(nn.Module):
                 hidden_channels,
                 hidden_channels,
                 shortcut,
-                1.0,
+                bottleneck_expansion,
                 depthwise,
                 dilated,
                 act=act,
@@ -349,14 +352,14 @@ class Mobile_Bottleneck(nn.Module):
         in_channels,
         out_channels,
         shortcut=True,
-        expansion=0.5,
+        bottleneck_expansion=0.5,
         depthwise=False,
         dilated=False,
         act="silu",
         attn=None,
     ):
         super().__init__()
-        hidden_channels = int(out_channels * expansion)
+        hidden_channels = int(out_channels * bottleneck_expansion)
 
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels, in_channels, 3, 1, 1, groups=in_channels),
@@ -378,7 +381,9 @@ class Mobile_Bottleneck(nn.Module):
         if attn is None:
             self.attn = nn.Identity()
         elif attn == "SE":  # Squeeze & Excitation attention
-            self.attn = SELayer(in_channels, out_channels, reduction=int(1 / expansion))
+            self.attn = SELayer(
+                in_channels, out_channels, reduction=int(1 / bottleneck_expansion)
+            )
         self.use_add = shortcut and in_channels == out_channels
 
     def forward(self, x):
@@ -402,6 +407,7 @@ class Mobile_CSPLayer(nn.Module):
         n=1,
         shortcut=True,
         expansion=0.5,
+        bottleneck_expansion=1.0,
         depthwise=False,
         dilated=False,
         act="silu",
@@ -424,7 +430,7 @@ class Mobile_CSPLayer(nn.Module):
                 hidden_channels,
                 hidden_channels,
                 shortcut,
-                1.0,
+                bottleneck_expansion,
                 depthwise,
                 dilated,
                 act=act,
@@ -440,3 +446,60 @@ class Mobile_CSPLayer(nn.Module):
         x_1 = self.m(x_1)
         x = torch.cat((x_1, x_2), dim=1)
         return self.conv3(x)
+
+class GhostConv(nn.Module):
+    """
+    GhostNet: More Features from Cheap Operations (2020)
+    ================================================================================
+    Convolution out_channels를 ratio만큼만 적용하고 나머지는 linear transform으로 진행
+    BaseConv block 대신 적용이 가능
+    입력으로 들어오는 out_channels가 홀수일 경우 에러가 날 수 있음.
+    A GhostConv2d -> Batchnorm -> silu/leaky relu block
+    """
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        ksize,
+        stride=1,
+        dw_size=3,
+        ratio=2,
+        bias=False,
+        act="silu",
+        dilation=1,
+    ):
+        super().__init__()
+        
+        self.oup = out_channels
+        init_channels = math.ceil(out_channels / ratio)
+        new_channels = init_channels*(ratio-1)
+
+        self.primary_conv = nn.Sequential(
+            nn.Conv2d(in_channels, init_channels, ksize, stride, ksize//2, bias=False),
+            nn.BatchNorm2d(init_channels),
+            nn.ReLU(inplace=True),
+        )
+
+        self.cheap_operation = nn.Sequential(
+            nn.Conv2d(init_channels, new_channels, dw_size, 1, dw_size//2, groups=init_channels, bias=False),
+        )
+
+
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.act = get_activation(act, inplace=True)
+
+    def forward(self, x):
+        x1 = self.primary_conv(x)
+        x2 = self.cheap_operation(x1)
+        out = torch.cat([x1,x2], dim=1)
+        out = out[:,:self.oup,:,:]
+
+        return self.act(self.bn(out))
+
+    def fuseforward(self, x):
+        x1 = self.primary_conv(x)
+        x2 = self.cheap_operation(x1)
+        out = torch.cat([x1,x2], dim=1)
+        out = out[:,:self.oup,:,:]
+
+        return self.act(out)

@@ -25,6 +25,8 @@ class YOLOPAFPN(nn.Module):
         act="silu",
         backbone_attn=None,
         fpn_attn=None,
+        expansion=0.5,
+        bottleneck_expansion=1.0,
     ):
         super().__init__()
         self.backbone = CSPDarknet(
@@ -34,6 +36,7 @@ class YOLOPAFPN(nn.Module):
             dilated=backbone_dilated,
             act=act,
             attn=backbone_attn,
+            bottleneck_expansion=bottleneck_expansion,
         )
         self.in_features = in_features
         self.in_channels = in_channels
@@ -51,6 +54,8 @@ class YOLOPAFPN(nn.Module):
             depthwise=depthwise,
             act=act,
             attn=fpn_attn,
+            expansion=expansion,
+            bottleneck_expansion=bottleneck_expansion,
         )  # cat
 
         self.reduce_conv1 = BaseConv(
@@ -64,6 +69,8 @@ class YOLOPAFPN(nn.Module):
             depthwise=depthwise,
             act=act,
             attn=fpn_attn,
+            expansion=expansion,
+            bottleneck_expansion=bottleneck_expansion,
         )
 
         # bottom-up conv
@@ -78,6 +85,8 @@ class YOLOPAFPN(nn.Module):
             depthwise=depthwise,
             act=act,
             attn=fpn_attn,
+            expansion=expansion,
+            bottleneck_expansion=bottleneck_expansion,
         )
 
         # bottom-up conv
@@ -92,6 +101,8 @@ class YOLOPAFPN(nn.Module):
             depthwise=depthwise,
             act=act,
             attn=fpn_attn,
+            expansion=expansion,
+            bottleneck_expansion=bottleneck_expansion,
         )
 
     def forward(self, input):

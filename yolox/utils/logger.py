@@ -217,12 +217,21 @@ class WandbLogger(object):
     def finish(self):
         self.run.finish()
 
-    def add_table(self, artifact_name, raw_images, output_dir, epoch):
+    def add_table(
+        self, artifact_name, raw_images, output_dir, epoch, gt_output_dir, id2classes
+    ):
         # create an artifact for all the raw data
         artifact = self.wandb.Artifact(artifact_name, type="raw_data")
 
         # Setup a WandB Table object to hold our dataset
-        columns = ["id", "raw", "pred"]
+        columns = [
+            "id",
+            "name",
+            "raw",
+            "classes",
+            "gt",
+            "pred",
+        ]
         # add a column for the pixel fraction of each class label
         table = self.wandb.Table(columns=columns)
 
@@ -232,6 +241,7 @@ class WandbLogger(object):
         print("making a table...")
         for idx, image_path in tqdm(enumerate(raw_images), total=len(raw_images)):
             img_name = image_path.split("/")[-1]
+            gt_img_path = os.path.join(gt_output_dir, img_name)
             pred_img_path = os.path.join(output_dir, img_name)
 
             artifact.add_file(pred_img_path, name=img_name)
@@ -239,8 +249,10 @@ class WandbLogger(object):
             # Finally, we add a row of our newly constructed data.
             train_id = img_name.split(".")[0]
             raw_img = self.wandb.Image(image_path)
+            classes = id2classes[str(idx)]
+            gt_img = self.wandb.Image(gt_img_path)
             pred_img = self.wandb.Image(pred_img_path)
-            row = [train_id, raw_img, pred_img]
+            row = [idx, f"{train_id}.jpg", raw_img, classes, gt_img, pred_img]
             table.add_data(*row)
 
         # .add the table to the artifact
