@@ -421,6 +421,7 @@ class Mobile_CSPLayer(nn.Module):
         dilated=False,
         act="silu",
         attn=None,
+        c_attn=None,
     ):
         """
         Args:
@@ -449,12 +450,19 @@ class Mobile_CSPLayer(nn.Module):
         ]
         self.m = nn.Sequential(*module_list)
 
+        if c_attn is None:
+            self.attn = nn.Identity()
+        elif c_attn == "SE":  # Squeeze & Excitation attention
+            self.attn = SELayer(
+                out_channels, out_channels, reduction=int(1 / bottleneck_expansion)
+            )
+
     def forward(self, x):
         x_1 = self.conv1(x)
         x_2 = self.conv2(x)
         x_1 = self.m(x_1)
         x = torch.cat((x_1, x_2), dim=1)
-        return self.conv3(x)
+        return self.attn(self.conv3(x))
 
 
 class GhostConv(nn.Module):
