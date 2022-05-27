@@ -181,17 +181,17 @@ class YOLOPAFPN_add(nn.Module):
             expansion=expansion,
             bottleneck_expansion=bottleneck_expansion,
         )
-        self.PAFPN_1 = PAFPN_add(
-            depth=depth,
-            width=width,
-            in_features=in_features,
-            in_channels=in_channels,
-            depthwise=depthwise,
-            act="silu",
-            fpn_attn=fpn_attn,
-            expansion=expansion,
-            bottleneck_expansion=bottleneck_expansion,
-        )
+        # self.PAFPN_1 = PAFPN_add(
+        #     depth=depth,
+        #     width=width,
+        #     in_features=in_features,
+        #     in_channels=in_channels,
+        #     depthwise=depthwise,
+        #     act="silu",
+        #     fpn_attn=fpn_attn,
+        #     expansion=expansion,
+        #     bottleneck_expansion=bottleneck_expansion,
+        # )
 
     def forward(self, input):
         """
@@ -207,5 +207,5 @@ class YOLOPAFPN_add(nn.Module):
         features = [out_features[f] for f in self.in_features]
 
         outputs = self.PAFPN_0(features)
-        outputs = self.PAFPN_1(features)
+        # outputs = self.PAFPN_1(features)
         return outputs
