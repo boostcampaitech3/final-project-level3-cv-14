@@ -58,7 +58,8 @@ class Trainer:
         # data/dataloader related attr
         self.data_type = torch.float16 if args.fp16 else torch.float32
         self.input_size = exp.input_size
-        self.best_ap = 0
+        self.best_ap50_95 = 0
+        self.best_ap50 = 0
 
         # metric record
         self.meter = MeterBuffer(window_size=exp.print_interval)
@@ -245,7 +246,7 @@ class Trainer:
     def after_train(self):
         logger.info(
             "Training of experiment is done and the best AP is {:.2f}".format(
-                self.best_ap * 100
+                self.best_ap50_95 * 100
             )
         )
         if self.rank == 0:
@@ -264,11 +265,11 @@ class Trainer:
             else:
                 self.model.head.use_l1 = True
             # self.args.eval_interval = 1
-            if not self.no_aug:
-                self.save_ckpt(ckpt_name="last_mosaic_epoch")
+            # if not self.no_aug:
+            #     self.save_ckpt(ckpt_name="last_mosaic_epoch")
 
     def after_epoch(self):
-        self.save_ckpt(ckpt_name="latest")
+        # self.save_ckpt(ckpt_name="latest")
 
         if (self.epoch + 1) == self.max_epoch:
             all_reduce_norm(self.model)
@@ -350,7 +351,7 @@ class Trainer:
             # resume the model/optimizer state dict
             model.load_state_dict(ckpt["model"])
             self.optimizer.load_state_dict(ckpt["optimizer"])
-            self.best_ap = ckpt.pop("best_ap", 0)
+            self.best_ap50_95 = ckpt.pop("best_ap50_95", 0)
             # resume the training states variables
             start_epoch = (
                 self.args.start_epoch - 1
@@ -390,8 +391,9 @@ class Trainer:
         self.outputs_list = outputs_list
         self.pred_dic = predictions_list
 
-        update_best_ckpt = ap50_95 > self.best_ap
-        self.best_ap = max(self.best_ap, ap50_95)
+        update_best_ckpt = ap50_95 > self.best_ap50_95
+        self.best_ap50_95 = max(self.best_ap50_95, ap50_95)
+        self.best_ap50 = max(self.best_ap50, ap50)
 
         if self.rank == 0:
             if self.args.logger == "tensorboard":
@@ -407,6 +409,10 @@ class Trainer:
                 )
             logger.info("\n" + summary)
         synchronize()
+
+        self.wandb_logger.log_metrics(
+            {"Best mAP50_95": self.best_ap50_95, "Best mAP50": self.best_ap50}
+        )
 
         self.save_ckpt("last_epoch", update_best_ckpt)
         if self.save_history_ckpt:
@@ -441,7 +447,7 @@ class Trainer:
                 "start_epoch": self.epoch + 1,
                 "model": save_model.state_dict(),
                 "optimizer": self.optimizer.state_dict(),
-                "best_ap": self.best_ap,
+                "best_ap50_95": self.best_ap50_95,
             }
             save_checkpoint(
                 ckpt_state,
