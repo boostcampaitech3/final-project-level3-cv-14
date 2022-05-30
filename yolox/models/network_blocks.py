@@ -5,6 +5,7 @@
 import torch
 import torch.nn as nn
 import math
+from torch import Tensor
 
 
 class SiLU(nn.Module):
@@ -531,3 +532,72 @@ class GhostConv(nn.Module):
         out = out[:, : self.oup, :, :]
 
         return self.act(out)
+
+
+class CSPLayer_Slicing(nn.Module):
+    """
+        ShuffleNet: An Extremely Efficient Convolutional Neural Network for Mobile
+    Devices(2017)
+        ================================================================================
+        기존의 CSPLayer를 split한 후, 반만 Bottleneck을 지나게 하여 연산량을 감소시킴
+        또한 적절히 채널을 섞어주기 위해 channel shuffle을 이용함
+    """
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        n=1,
+        shortcut=True,
+        expansion=0.5,
+        bottleneck_expansion=1.0,
+        depthwise=False,
+        dilated=False,
+        act="silu",
+        attn=None,
+    ):
+        """
+        Args:
+            in_channels (int): input channels.
+            out_channels (int): output channels.
+            n (int): number of Bottlenecks. Default value: 1.
+        """
+        super().__init__()
+        hidden_channels = int(in_channels * 0.5)  # hidden channels
+        self.conv3 = BaseConv(2 * hidden_channels, out_channels, 1, stride=1, act=act)
+        module_list = [
+            Bottleneck(
+                hidden_channels,
+                hidden_channels,
+                shortcut,
+                bottleneck_expansion,
+                depthwise,
+                dilated,
+                act=act,
+                attn=attn,
+            )
+            for _ in range(n)
+        ]
+        self.m = nn.Sequential(*module_list)
+
+    def forward(self, x):
+        x_1, x_2 = x.chunk(2, dim=1)
+        x_1 = self.m(x_1)
+        x = torch.cat((x_1, x_2), dim=1)
+        x = channel_shuffle(x, 2)
+        return self.conv3(x)
+
+
+def channel_shuffle(x: Tensor, groups: int) -> Tensor:
+    batchsize, num_channels, height, width = x.size()
+    channels_per_group = num_channels // groups
+
+    # reshape
+    x = x.view(batchsize, groups, channels_per_group, height, width)
+
+    x = torch.transpose(x, 1, 2).contiguous()
+
+    # flatten
+    x = x.view(batchsize, -1, height, width)
+
+    return x
