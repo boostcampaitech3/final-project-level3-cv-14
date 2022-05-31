@@ -123,6 +123,8 @@ class Bottleneck(nn.Module):
             self.attn = SELayer(
                 in_channels, out_channels, reduction=int(1 / bottleneck_expansion)
             )
+        elif attn == "CA":
+            self.attn = CALayer(out_channels, out_channels, reduction=4)
 
     def forward(self, x):
         y = self.attn(self.conv2(self.conv1(x)))
@@ -224,6 +226,8 @@ class CSPLayer(nn.Module):
             self.attn = SELayer(
                 out_channels, out_channels, reduction=int(1 / bottleneck_expansion)
             )
+        elif c_attn == "CA":
+            self.attn = CALayer(out_channels, out_channels, reduction=4)
 
     def forward(self, x):
         x_1 = self.conv1(x)
@@ -394,11 +398,12 @@ class Mobile_Bottleneck(nn.Module):
             self.attn = SELayer(
                 in_channels, out_channels, reduction=int(1 / bottleneck_expansion)
             )
+        elif attn == "CA":
+            self.attn = CALayer(out_channels, out_channels, reduction=4)
         self.use_add = shortcut and in_channels == out_channels
 
     def forward(self, x):
-        y = self.conv2(self.expansion(self.reduction(self.conv1(x))))
-        y = self.attn(y)
+        y = self.conv2(self.expansion(self.reduction(self.attn(self.conv1(x)))))
         if self.use_add:
             y = y + x
         return y
@@ -457,6 +462,8 @@ class Mobile_CSPLayer(nn.Module):
             self.attn = SELayer(
                 out_channels, out_channels, reduction=int(1 / bottleneck_expansion)
             )
+        elif c_attn == "CA":
+            self.attn = CALayer(out_channels, out_channels, reduction=4)
 
     def forward(self, x):
         x_1 = self.conv1(x)
@@ -533,6 +540,40 @@ class GhostConv(nn.Module):
 
         return self.act(out)
 
+
+class CALayer(nn.Module):
+    """
+    Coordinate Attention for Efficient Mobile Network Design
+    https://arxiv.org/pdf/2103.02907.pdf - Figure 2(c)
+    =========================================================
+    H, W 방향 AvgPool attention
+    """
+
+    def __init__(self, in_channels, out_channels, reduction=4):
+        super().__init__()
+        self.cat_conv = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels // reduction, 1, 1),
+            nn.BatchNorm2d(in_channels // reduction),
+            nn.SiLU(inplace=True),
+        )
+        self.conv_x = nn.Conv2d(in_channels // reduction, out_channels, 1, 1)
+        self.conv_y = nn.Conv2d(in_channels // reduction, out_channels, 1, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        b, c, h, w = x.size()
+        x_avg_pool = nn.AvgPool2d((1, w))(x).transpose(2, 3)  # b, c, h, 1 -> b, c, 1, h
+        y_avg_pool = nn.AvgPool2d((h, 1))(x)  # b, c, 1, w
+
+        x_x, x_y = self.cat_conv(torch.cat((x_avg_pool, y_avg_pool), 3)).chunk(
+            2, dim=3
+        )  # b, c, 1, w(h)
+        x_x = x_x.transpose(2, 3)  # b, c, h, 1
+
+        x_x = self.sigmoid(self.conv_x(x_x))
+        x_y = self.sigmoid(self.conv_y(x_y))
+
+        return x * x_x * x_y
 
 class CSPLayer_Slicing(nn.Module):
     """
