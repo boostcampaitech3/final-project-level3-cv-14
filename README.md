@@ -1,5 +1,44 @@
-# YOLOX
+## 프로젝트 개요
+### 문제 정의
+YOLOX-Nano 모델 구조 변경을 통한 YOLOX-nano 정확도(mAP) 개선
 
+
+### 제약 사항
+- 모델의 FLOPs와 Parameter 수는 기준 모델보다 작거나 같아야 함
+- 고도화된 학습 기법을 이용한 성능 개선 금지
+- Dataset : Pascal VOC 2007
+
+
+### 수행 내용
+모델을 구성하는 **레이어, 합성곱 블록 등을 변형**하여 베이스라인 모델의 parameter 개수와 GFLOPs를 초과하지 않으면서 **더욱 정확도(mAP) 높은 모델**을 생성
+
+### 최종 결과
+
+![image](https://user-images.githubusercontent.com/64190071/172392206-0e345df5-0ae1-47c4-af31-2471f9207ce4.png)
+
+먼저, 기존의 모델에서 구조적 개선을 통한 경량화를 진행하여 **최대한 성능을 유지하면서 FLOPs와 Parameters를 줄일 수 있었습니다.**
+
+여유 공간을 확보한 후, 성능 향상 기법을 적용하여 기존 모델 대비 **Parameters는 약 11.1% 감소**, mAP@.5:.95는 약 12.4% 상승이라는 결과를 얻어냈습니다.
+
+|Model | Params<br>(M) |FLOPs<br>(G)|mAP<sup>val<br>0.5:0.95 | mAP<sup>val<br>0.5 |
+| ------        |  :---:       |:---:     |:---:  | :---: |
+|YOLOX-Nano Base |0.90  | 1.05 |28.29 | 50.64 |
+|**Ours** |**0.80** | **1.05** | **31.81** | **53.75** |
+
+#### 변경 내용
+- 구조 개선을 통한 경량화
+  - Backbone 구조 개선
+  - FPN 구조 개선
+- 성능 향상 기법
+  - Mobile Bottleneck
+  - GhostNet Convolution
+  - Spatial Attention
+
+Methods별 실험 결과
+
+<img src = "https://user-images.githubusercontent.com/64190071/172396797-e08e0801-90b3-47a6-9530-e73ee0651fc8.png" width="60%">
+
+## 사용 방법
 ### 가상 환경 설정
 
 ```shell
