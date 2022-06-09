@@ -1,4 +1,10 @@
 ## 프로젝트 개요
+<div align="center">
+<img src="https://user-images.githubusercontent.com/64190071/172797132-9fecb534-fbcd-49f4-99ca-1f52ce7537e5.png" width=30%>
+</div>
+
+인공지능 모델 압축 (경량화) 기술 기반 On-device AI를 추구하는 [Nota AI](https://www.nota.ai/)와 연계하여 진행한 YOLOX-nano 모델 경량화 프로젝트입니다.
+
 ### 문제 정의
 YOLOX-Nano 모델 구조 변경을 통한 YOLOX-nano 정확도(mAP) 개선
 
@@ -114,10 +120,21 @@ Shell script 말고도 학습을 진행할 수 있습니다.
 ```python
 python tools/train.py -f exps/default/yolox_voc_nano.py -b 16 --logger wandb wandb-project <project name>
 ```
+  
+  
+### 팀원
 
+|                                                  [김찬혁](https://github.com/Chanhook)                                                   |                                                                              [문태진](https://github.com/moontaijin)                                                  |                                                                        [이인서](https://github.com/Devlee247)                                                                         |                                                                         [장상원](https://github.com/agwmon)                                                                         |
+| :-------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------: |
+| ![KakaoTalk_20220421_103825891_03](https://user-images.githubusercontent.com/64190071/164358205-2048f3c2-1216-4836-a77f-a25de6a9091c.jpg) | ![KakaoTalk_20220421_103825891_04](https://user-images.githubusercontent.com/64190071/164358227-ef0d7919-bd0d-4a9d-8d50-42757a5c3534.jpg) | ![KakaoTalk_20220421_103825891_02](https://user-images.githubusercontent.com/64190071/164358185-a63371d7-84ad-4eb9-8337-c70857c0e170.jpg) | ![KakaoTalk_20220421_103825891_01](https://user-images.githubusercontent.com/64190071/164358129-a9ce91f8-84c5-4a9c-8329-27cf18e68e7f.jpg) |
+
+  
 ## Cite YOLOX
 If you use YOLOX in your research, please cite our work by using the following BibTeX entry:
 
+  
+
+  
 ```latex
  @article{yolox2021,
   title={YOLOX: Exceeding YOLO Series in 2021},
