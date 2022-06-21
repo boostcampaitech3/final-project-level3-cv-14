@@ -4,6 +4,8 @@
 </div>
 
 인공지능 모델 압축 (경량화) 기술 기반 On-device AI를 추구하는 [Nota AI](https://www.nota.ai/)와 연계하여 진행한 YOLOX-nano 모델 경량화 프로젝트입니다.
+### 프로젝트 기간
+2022.05.16 ~ 2022.06.07
 
 ### 문제 정의
 YOLOX-Nano 모델 구조 변경을 통한 YOLOX-nano 정확도(mAP) 개선
